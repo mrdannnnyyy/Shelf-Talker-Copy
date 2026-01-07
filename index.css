@@ -1,0 +1,154 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Oswald:wght@300;400;500;700&family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg-dark: #121212;
+    --bg-panel: rgba(30, 30, 30, 0.6);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --gold: #D4AF37;
+    --gold-dim: #8a7020;
+    --text-light: #E5E5E5;
+}
+
+body {
+    font-family: 'Montserrat', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    overflow: hidden; /* Prevent body scroll, let containers scroll */
+}
+
+h1, h2, h3, .serif {
+    font-family: 'Cinzel', serif;
+}
+
+/* Glassmorphism Utilities */
+.glass-panel {
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid var(--border-glass);
+}
+
+.glass-border {
+    border: 1px solid var(--border-glass);
+}
+
+.glass-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border-glass);
+    color: white;
+    transition: all 0.2s;
+}
+.glass-input:focus {
+    border-color: var(--gold);
+    background: rgba(0, 0, 0, 0.5);
+    outline: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+    background: #333; 
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--gold); 
+}
+
+/* Gold Foil Effect */
+.text-gold-foil {
+  background: linear-gradient(45deg, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #bf953f; 
+  text-shadow: 0px 1px 1px rgba(0,0,0,0.2);
+}
+
+.bg-gold-foil {
+  background: linear-gradient(45deg, #bf953f, #fcf6ba, #b38728, #fbf5b7, #aa771c) !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.border-gold-foil {
+    border-color: #b38728 !important;
+}
+
+.font-oswald {
+    font-family: 'Oswald', sans-serif;
+}
+
+.clip-path-ribbon {
+    clip-path: polygon(0% 0%, 100% 0%, 95% 50%, 100% 100%, 0% 100%, 5% 50%);
+}
+
+/* STRICT PRINT STYLES */
+@media print {
+  @page { margin: 0; size: auto; }
+  
+  /* CRITICAL: Override application overflow hidden which blocks printing */
+  html, body, #root, main {
+      overflow: visible !important;
+      height: auto !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      display: block !important;
+      position: static !important;
+  }
+  
+  /* Defaults: Hide everything, show body as white */
+  body { background: white !important; }
+  body * { visibility: hidden; }
+
+  /* 
+     CASE 1: SINGLE EDITOR PRINT 
+     Only activate if we are NOT in the PrintSheet view 
+  */
+  .single-canvas-mode, .single-canvas-mode * {
+      visibility: visible !important;
+  }
+  
+  .single-canvas-mode .canvas-root {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    transform: none !important;
+    background: white !important;
+    z-index: 9999;
+  }
+
+  /* 
+     CASE 2: BATCH PRINT SHEET (Overrides Single Editor)
+     If #print-sheet-root exists and is visible, it takes precedence
+  */
+  #print-sheet-root, #print-sheet-root * { 
+      visibility: visible !important; 
+  }
+  
+  /* Ensure print sheet root is positioned absolutely at top left */
+  #print-sheet-root {
+      position: absolute !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+  }
+}
