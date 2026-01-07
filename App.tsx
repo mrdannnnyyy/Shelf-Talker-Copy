@@ -37,7 +37,9 @@ const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle');
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
-  const [currentTemplateId, setCurrentTemplateId] = useState<string>('default');
+  
+  // ACTIVE TEMPLATE TRACKING (Fix 1)
+  const [activeTemplateId, setActiveTemplateId] = useState<string>('default');
 
   // PRODUCTION ENGINE STATE
   const [printQueue, setPrintQueue] = useState<{ id: string; layers: Layer[] }[]>([]);
@@ -220,7 +222,7 @@ const App: React.FC = () => {
   // --- TEMPLATE LOGIC ---
   const handleLoadTemplate = (templateId: string) => {
       if (!templateId) return;
-      setCurrentTemplateId(templateId);
+      setActiveTemplateId(templateId);
 
       // 1. Staff Pick Preset
       if (templateId === 'staff-pick') {
@@ -288,8 +290,14 @@ const App: React.FC = () => {
   };
 
   const handleUpdateTemplate = () => {
-      const existingRecordIndex = history.findIndex(h => h.id === currentTemplateId);
-      if (existingRecordIndex === -1) return;
+      // Logic Fix: Ensure we are updating the correct record
+      const existingRecordIndex = history.findIndex(h => h.id === activeTemplateId);
+      
+      if (existingRecordIndex === -1) {
+          // Fallback if ID not found (e.g., deleted or default)
+          handleSaveToVault();
+          return;
+      }
 
       if (confirm("Update existing template with current changes?")) {
           const updatedHistory = [...history];
@@ -326,7 +334,7 @@ const App: React.FC = () => {
       setHistory(newHistory);
       localStorage.setItem('std_history', JSON.stringify(newHistory));
       
-      setCurrentTemplateId(newId); // Switch to the new template
+      setActiveTemplateId(newId); // Switch to the new template
       setShowSaveModal(false);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -355,7 +363,7 @@ const App: React.FC = () => {
                   setCanvasConfig(record.config);
               }
               
-              setCurrentTemplateId(record.id); // IMPORTANT: Track ID to allow updates
+              setActiveTemplateId(record.id); // IMPORTANT: Track ID to allow updates
               setViewMode('batch'); // Go to Data Mode by default on load from vault
           }
       }
@@ -380,7 +388,8 @@ const App: React.FC = () => {
       </>
   );
 
-  const isCustomTemplate = history.some(h => h.id === currentTemplateId);
+  // Check if current active template is a custom user-saved one
+  const isCustomTemplate = history.some(h => h.id === activeTemplateId);
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#121212] text-gray-200 font-sans overflow-hidden relative">
@@ -414,7 +423,7 @@ const App: React.FC = () => {
              {/* DATA MODE: LOAD TEMPLATE */}
              {viewMode === 'batch' && (
                   <select 
-                    value={currentTemplateId}
+                    value={activeTemplateId}
                     onChange={(e) => handleLoadTemplate(e.target.value)} 
                     className="bg-[#1a1a1a] text-xs text-gray-300 border border-gray-700 rounded-sm px-2 py-1 outline-none w-40"
                   >
@@ -426,7 +435,7 @@ const App: React.FC = () => {
              {viewMode === 'architecture' && (
                   <div className="flex items-center gap-2">
                       <select 
-                        value={currentTemplateId}
+                        value={activeTemplateId}
                         onChange={(e) => handleLoadTemplate(e.target.value)} 
                         className="bg-[#1a1a1a] text-xs text-gray-300 border border-gray-700 rounded-sm px-2 py-2 outline-none w-32"
                       >
@@ -434,23 +443,22 @@ const App: React.FC = () => {
                           {renderTemplateOptions()}
                       </select>
                       
-                      {isCustomTemplate && (
+                      {/* FIX 1: Toggle Button Logic (Save vs Update) */}
+                      {isCustomTemplate ? (
                            <button 
                                 onClick={handleUpdateTemplate}
-                                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#333] hover:bg-[#444] text-white'}`}
-                                title="Overwrite existing template"
+                                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#D4AF37] hover:bg-[#b38f20] text-black'}`}
                            >
-                                <RefreshCw size={14} /> Update
+                                <RefreshCw size={14} /> Update Template
+                           </button>
+                      ) : (
+                           <button 
+                                onClick={handleSaveToVault}
+                                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#333] hover:bg-[#444] text-white'}`}
+                           >
+                                <Save size={14} /> Save as Template
                            </button>
                       )}
-
-                      <button 
-                        onClick={handleSaveToVault}
-                        className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#333] hover:bg-[#444] text-white'}`}
-                      >
-                        {saveStatus === 'saved' ? <CheckCircle size={14} /> : <Save size={14} />}
-                        {saveStatus === 'saved' ? 'Saved' : 'Save as'}
-                      </button>
                   </div>
              )}
          </div>

@@ -176,7 +176,7 @@ const EditorPanel: React.FC<EditorPanelProps> = ({
                     <select 
                         onChange={handleDataBindingChange}
                         className="glass-input w-full p-2 text-xs rounded-sm cursor-pointer text-[#D4AF37] border-[#D4AF37]/50"
-                        disabled={!isArchitecture} // Lock mapping in Data Mode? Or allow quick re-map? Let's allow quick re-map.
+                        /* FIX 2: Removed disabled={!isArchitecture} constraint */
                     >
                         <option value="">-- Select Data Field --</option>
                         {DATA_OPTIONS.map(opt => (
