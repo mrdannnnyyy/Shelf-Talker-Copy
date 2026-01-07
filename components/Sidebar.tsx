@@ -58,20 +58,6 @@ const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const selectedLayer = layers.find((l) => l.id === selectedLayerId);
   const isArchitecture = viewMode === 'architecture';
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-              if (reader.result) {
-                  onUploadBadge(reader.result as string);
-              }
-          };
-          reader.readAsDataURL(file);
-      }
-  };
 
   const updateStyle = (key: string, value: any) => {
       if (!selectedLayer) return;
@@ -91,7 +77,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   // --- HELPER: MAPPED GETTER/SETTER ---
   const getMappedContent = (systemKey: string) => {
       // 1. Find a mapped ID that corresponds to an EXISTING layer
-      // This fix prevents "stale" IDs from blocking the fallback
       const mappedId = Object.keys(layerMapping).find(id => 
           layerMapping[id] === systemKey && layers.some(l => l.id === id)
       );
@@ -107,29 +92,26 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
   
   const updateMappedContent = (systemKey: string, val: string) => {
-      const updatedLayerIds = new Set<string>();
-
-      // 1. Find ALL layers mapped to this system key explicitly
+      // 1. Try to find layers explicitly mapped to this key
       const mappedIds = Object.keys(layerMapping).filter(id => layerMapping[id] === systemKey);
-      mappedIds.forEach(id => {
-          // Only update if layer actually exists
-          if (layers.some(l => l.id === id)) {
-            onUpdateLayer(id, { content: val });
-            updatedLayerIds.add(id);
+      
+      let targets = mappedIds.filter(id => layers.some(l => l.id === id));
+      
+      // 2. If no mapped layers found, try to find a layer with the ID == systemKey
+      if (targets.length === 0) {
+          const directMatch = layers.find(l => l.id === systemKey);
+          if (directMatch) {
+              targets.push(directMatch.id);
           }
-      });
+      }
 
-      // 2. Also update layer with matching ID (system default), IF it wasn't already updated
-      // We check if the systemKey itself is a valid layer ID that hasn't been touched yet
-      const fallbackLayer = layers.find(l => l.id === systemKey);
-      if (fallbackLayer && !updatedLayerIds.has(fallbackLayer.id)) {
-           // We only update the fallback if:
-           // A) There is no specific mapping for this systemKey OR 
-           // B) The mapping explicitly maps it to itself (default)
-           const mappingForFallback = layerMapping[fallbackLayer.id];
-           if (!mappingForFallback || mappingForFallback === systemKey) {
-               onUpdateLayer(fallbackLayer.id, { content: val });
-           }
+      // 3. Update all found targets
+      if (targets.length > 0) {
+          targets.forEach(id => {
+              onUpdateLayer(id, { content: val });
+          });
+      } else {
+          // Fallback warning (silent) or handling if needed
       }
   };
 
@@ -139,15 +121,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       onBindLayer(selectedLayer.id, systemKey);
   };
 
-  // --- SUMMARIZE LOGIC (DETERMINISTIC) ---
+  // --- SUMMARIZE LOGIC ---
   const handleSummarize = (e: React.MouseEvent) => {
       e.preventDefault(); 
       e.stopPropagation();
       
-      // 1. Get content (try map, fallback to ID)
       let currentText = getMappedContent('tasting-notes');
       
-      // Fallback: If map returned nothing, look specifically for the tasting-notes layer directly
       if (!currentText) {
           const targetLayer = layers.find(l => l.id === 'tasting-notes');
           if (targetLayer) currentText = targetLayer.content || '';
@@ -155,16 +135,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       
       if (!currentText) return;
 
-      // 2. Summarize logic
-      // Handle multiple spaces/newlines cleanly
       const cleanText = currentText.replace(/\s+/g, ' ').trim();
       const words = cleanText.split(' ');
       
-      // Only summarize if it's long enough
       if (words.length <= 3) return;
-
       const summary = words.slice(0, 3).join(' ') + '...';
-      
       updateMappedContent('tasting-notes', summary);
   };
 
@@ -221,7 +196,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 
-                {/* 1. DATA MAPPING (Restored) */}
+                {/* 1. DATA MAPPING */}
                 {(selectedLayer.type === 'text' || selectedLayer.type === 'group') && (
                     <div className="space-y-2 pb-4 border-b border-gray-800">
                         <label className="text-[10px] font-bold text-[#D4AF37] uppercase tracking-widest flex items-center gap-2">
@@ -273,7 +248,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   }
 
   // =========================================================
-  // DATA MODE (FORM EDITOR)
+  // DATA MODE (FORM EDITOR) - ENSURED NO DISABLED INPUTS
   // =========================================================
   return (
     <aside className="glass-panel flex flex-col h-full overflow-hidden text-gray-200">

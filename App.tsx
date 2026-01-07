@@ -20,7 +20,7 @@ const App: React.FC = () => {
       splitRatio: 0.6,
   });
   
-  // VIEW MODE: Added 'print' as a main tab
+  // VIEW MODE
   const [viewMode, setViewMode] = useState<'batch' | 'vault' | 'architecture' | 'print'>('batch');
   const [zoomLevel, setZoomLevel] = useState(0.85);
 
@@ -38,20 +38,19 @@ const App: React.FC = () => {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
   
-  // ACTIVE TEMPLATE TRACKING (Fix 1)
-  const [activeTemplateId, setActiveTemplateId] = useState<string>('default');
+  // --- FIX 1: Active Template Tracking ---
+  // null = Unsaved / Factory Preset
+  // string = ID of saved template in Vault
+  const [activeTemplateId, setActiveTemplateId] = useState<string | null>(null);
 
   // PRODUCTION ENGINE STATE
   const [printQueue, setPrintQueue] = useState<{ id: string; layers: Layer[] }[]>([]);
   const [checkedProducts, setCheckedProducts] = useState<Set<number>>(new Set());
-  const [customBadges, setCustomBadges] = useState<string[]>([]); // Base64 strings
+  const [customBadges, setCustomBadges] = useState<string[]>([]); 
 
-  // HELPER: Reset mappings for standard templates to ensure inputs work
+  // HELPER: Reset mappings for standard templates
   const resetStandardMappings = () => {
         const initLayerMap: Record<string, string> = {};
-        // We create a standard map based on known system keys
-        // This ensures that if the template has these IDs, they are mapped correctly
-        // and clears any "ghost" mappings from previous custom templates
         ['product-name-1', 'product-name-2', 'active-price', 'category-label', 'was-price', 'size-label', 'tasting-notes'].forEach(key => {
             initLayerMap[key] = key;
         });
@@ -222,22 +221,21 @@ const App: React.FC = () => {
   // --- TEMPLATE LOGIC ---
   const handleLoadTemplate = (templateId: string) => {
       if (!templateId) return;
-      setActiveTemplateId(templateId);
 
-      // 1. Staff Pick Preset
+      // 1. FACTORY PRESETS (No ID for update)
       if (templateId === 'staff-pick') {
           if (confirm("Load Staff Pick Special layout? This will replace your current design.")) {
+              setActiveTemplateId(null); // Reset active ID
               const freshMappings = resetStandardMappings();
               
               setCanvasConfig(prev => ({ 
                   ...prev, 
-                  backgroundTop: '#F5F0E1', // Restore default top
-                  backgroundBottom: '#7B1E36', // Restore default bottom (overridden by split/shapes)
+                  backgroundTop: '#F5F0E1', 
+                  backgroundBottom: '#7B1E36',
                   splitRatio: 0.6
               }));
               
               let newLayers = JSON.parse(JSON.stringify(STAFF_PICK_LAYERS));
-              
               if (selectedProductIndex !== null) {
                   newLayers = applyProductToLayers(products[selectedProductIndex], newLayers, columnMapping, freshMappings);
               }
@@ -246,9 +244,9 @@ const App: React.FC = () => {
           return;
       }
 
-      // 2. Factory Defaults
       if (templateId === 'default' || templateId === 'reset') {
           if (confirm("Reset layout to default?")) {
+              setActiveTemplateId(null); // Reset active ID
               const freshMappings = resetStandardMappings();
 
               setCanvasConfig({ ...CANVAS_CONFIG, backgroundTop: '#F5F0E1', backgroundBottom: '#7B1E36', splitRatio: 0.6 });
@@ -261,10 +259,12 @@ const App: React.FC = () => {
           return;
       } 
       
-      // 3. Custom Saved Templates
+      // 2. SAVED CUSTOM TEMPLATES (Set active ID)
       const record = history.find(h => h.id === templateId);
       if (record) {
           if (confirm(`Load custom template "${record.templateName}"?`)) {
+              setActiveTemplateId(record.id); // Set the active ID
+              
               if (record.config) {
                   setCanvasConfig(record.config);
               }
@@ -274,7 +274,6 @@ const App: React.FC = () => {
               }
               
               let newLayers = JSON.parse(JSON.stringify(record.layers));
-              // Re-bind data if a product is currently active
               if (selectedProductIndex !== null && products[selectedProductIndex]) {
                   newLayers = applyProductToLayers(products[selectedProductIndex], newLayers, columnMapping, record.layerMapping || layerMapping);
               }
@@ -283,24 +282,38 @@ const App: React.FC = () => {
       }
   };
 
-  // --- VAULT / SAVE TEMPLATE LOGIC ---
+  // --- SAVE / UPDATE CONTROLLER ---
+  const handleSaveButtonAction = () => {
+      if (activeTemplateId) {
+          handleUpdateTemplate();
+      } else {
+          handleSaveToVault();
+      }
+  };
+
   const handleSaveToVault = () => {
       setNewTemplateName("Custom Template");
       setShowSaveModal(true);
   };
 
   const handleUpdateTemplate = () => {
-      // Logic Fix: Ensure we are updating the correct record
+      // Logic Fix: Only update if we have a valid ID
+      if (!activeTemplateId) {
+          handleSaveToVault();
+          return;
+      }
+
       const existingRecordIndex = history.findIndex(h => h.id === activeTemplateId);
       
       if (existingRecordIndex === -1) {
-          // Fallback if ID not found (e.g., deleted or default)
+          // Fallback if ID not found (e.g. deleted externally)
           handleSaveToVault();
           return;
       }
 
       if (confirm("Update existing template with current changes?")) {
           const updatedHistory = [...history];
+          // Update the existing record in place
           updatedHistory[existingRecordIndex] = {
               ...updatedHistory[existingRecordIndex],
               timestamp: Date.now(),
@@ -310,6 +323,7 @@ const App: React.FC = () => {
           };
           setHistory(updatedHistory);
           localStorage.setItem('std_history', JSON.stringify(updatedHistory));
+          
           setSaveStatus('saved');
           setTimeout(() => setSaveStatus('idle'), 2000);
       }
@@ -323,18 +337,18 @@ const App: React.FC = () => {
           id: newId,
           timestamp: Date.now(),
           productName: "Template", 
-          templateName: newTemplateName, // User provided name
+          templateName: newTemplateName, 
           printDate: new Date().toISOString(),
           layers: JSON.parse(JSON.stringify(layers)),
           layerMapping: JSON.parse(JSON.stringify(layerMapping)),
-          config: JSON.parse(JSON.stringify(canvasConfig)) // Save Config
+          config: JSON.parse(JSON.stringify(canvasConfig))
       };
       
       const newHistory = [...history, record];
       setHistory(newHistory);
       localStorage.setItem('std_history', JSON.stringify(newHistory));
       
-      setActiveTemplateId(newId); // Switch to the new template
+      setActiveTemplateId(newId); // Set active ID to the newly created template
       setShowSaveModal(false);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -347,26 +361,7 @@ const App: React.FC = () => {
   };
   
   const handleLoadFromVault = (record: HistoryRecord) => {
-      if (confirm(`Load "${record.templateName || record.productName}"?`)) {
-          if (record.layers) {
-              setLayers(JSON.parse(JSON.stringify(record.layers)));
-              
-              if (record.layerMapping) {
-                  setLayerMapping(JSON.parse(JSON.stringify(record.layerMapping)));
-                  localStorage.setItem('std_layer_mapping', JSON.stringify(record.layerMapping));
-              } else {
-                  // Fallback for legacy templates without mapping
-                  resetStandardMappings();
-              }
-
-              if (record.config) {
-                  setCanvasConfig(record.config);
-              }
-              
-              setActiveTemplateId(record.id); // IMPORTANT: Track ID to allow updates
-              setViewMode('batch'); // Go to Data Mode by default on load from vault
-          }
-      }
+      handleLoadTemplate(record.id);
   };
 
   // --- SEARCH ---
@@ -374,11 +369,14 @@ const App: React.FC = () => {
     Object.values(p).some(val => String(val).toLowerCase().includes(searchTerm.toLowerCase()))
   );
   
-  // --- TEMPLATE OPTIONS RENDERER ---
+  // --- RENDER HELPERS ---
   const renderTemplateOptions = () => (
       <>
-          <option value="default">Default Template</option>
-          <option value="staff-pick">Staff Pick Special</option>
+          <option value="">-- Select Template --</option>
+          <optgroup label="Presets">
+              <option value="default">Factory Default</option>
+              <option value="staff-pick">Staff Pick Special</option>
+          </optgroup>
           <optgroup label="My Saved Templates">
               {history.filter(h => h.templateName).map(h => (
                   <option key={h.id} value={h.id}>{h.templateName}</option>
@@ -387,9 +385,6 @@ const App: React.FC = () => {
           <option value="reset">Reset Layout</option>
       </>
   );
-
-  // Check if current active template is a custom user-saved one
-  const isCustomTemplate = history.some(h => h.id === activeTemplateId);
 
   return (
     <div className="flex flex-col h-screen w-full bg-[#121212] text-gray-200 font-sans overflow-hidden relative">
@@ -413,7 +408,6 @@ const App: React.FC = () => {
              <button onClick={() => setViewMode('vault')} className={`flex items-center gap-2 px-4 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${viewMode === 'vault' ? 'bg-[#D4AF37] text-black' : 'text-gray-500 hover:text-white'}`}>
                 <History size={12} /> Vault
              </button>
-             {/* NEW PRINT TAB */}
              <button onClick={() => setViewMode('print')} className={`flex items-center gap-2 px-4 py-1.5 rounded-sm text-[10px] font-bold uppercase tracking-widest transition-all ${viewMode === 'print' ? 'bg-[#D4AF37] text-black' : 'text-gray-500 hover:text-white'}`}>
                 <Printer size={12} /> Print Queue <span className="ml-1 bg-white/20 px-1 rounded-sm text-[9px]">{printQueue.length}</span>
              </button>
@@ -423,7 +417,7 @@ const App: React.FC = () => {
              {/* DATA MODE: LOAD TEMPLATE */}
              {viewMode === 'batch' && (
                   <select 
-                    value={activeTemplateId}
+                    value={activeTemplateId || ""}
                     onChange={(e) => handleLoadTemplate(e.target.value)} 
                     className="bg-[#1a1a1a] text-xs text-gray-300 border border-gray-700 rounded-sm px-2 py-1 outline-none w-40"
                   >
@@ -431,34 +425,26 @@ const App: React.FC = () => {
                   </select>
              )}
 
-             {/* DESIGN MODE: LOAD & SAVE & UPDATE */}
+             {/* DESIGN MODE: LOAD & SMART SAVE BUTTON */}
              {viewMode === 'architecture' && (
                   <div className="flex items-center gap-2">
                       <select 
-                        value={activeTemplateId}
+                        value={activeTemplateId || ""}
                         onChange={(e) => handleLoadTemplate(e.target.value)} 
                         className="bg-[#1a1a1a] text-xs text-gray-300 border border-gray-700 rounded-sm px-2 py-2 outline-none w-32"
                       >
-                          <option value="">-- Edit --</option>
                           {renderTemplateOptions()}
                       </select>
                       
-                      {/* FIX 1: Toggle Button Logic (Save vs Update) */}
-                      {isCustomTemplate ? (
-                           <button 
-                                onClick={handleUpdateTemplate}
-                                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#D4AF37] hover:bg-[#b38f20] text-black'}`}
-                           >
-                                <RefreshCw size={14} /> Update Template
-                           </button>
-                      ) : (
-                           <button 
-                                onClick={handleSaveToVault}
-                                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : 'bg-[#333] hover:bg-[#444] text-white'}`}
-                           >
-                                <Save size={14} /> Save as Template
-                           </button>
-                      )}
+                      {/* FIX: Smart Button - "Update" if template active, "Save As" if not */}
+                      <button 
+                        onClick={handleSaveButtonAction}
+                        className={`px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-sm flex items-center gap-2 transition-all border border-gray-600 ${saveStatus === 'saved' ? 'bg-green-600 text-white border-green-500' : (activeTemplateId ? 'bg-[#D4AF37] hover:bg-[#b38f20] text-black' : 'bg-[#333] hover:bg-[#444] text-white')}`}
+                        title={activeTemplateId ? "Update the currently loaded template" : "Save as a new template"}
+                      >
+                        {saveStatus === 'saved' ? <CheckCircle size={14} /> : (activeTemplateId ? <RefreshCw size={14} /> : <Save size={14} />)}
+                        {saveStatus === 'saved' ? 'Saved' : (activeTemplateId ? 'Update Template' : 'Save as Template')}
+                      </button>
                   </div>
              )}
          </div>
@@ -466,8 +452,6 @@ const App: React.FC = () => {
 
       {/* MAIN CONTENT AREA */}
       <main className="flex-1 flex overflow-hidden">
-         
-         {/* VIEW 1: PRINT SHEET (Full Screen) */}
          {viewMode === 'print' ? (
              <div className="w-full h-full bg-[#E5E5E5]">
                  <PrintSheet 
@@ -480,14 +464,11 @@ const App: React.FC = () => {
                   />
              </div>
          ) : viewMode === 'vault' ? (
-             // VIEW 2: VAULT
              <div className="flex-1 bg-[#121212]">
                  <Vault history={history} onReprint={handleLoadFromVault} onUpdateRecord={updateVaultRecord} />
              </div>
          ) : (
-             // VIEW 3: EDITOR (DATA & DESIGN)
              <>
-                {/* LEFT COL: INVENTORY (Only in Data Mode) */}
                 {viewMode === 'batch' && (
                     <div className="w-[20%] min-w-[250px] border-r border-[rgba(255,255,255,0.08)] bg-[#121212] flex flex-col">
                         <div className="p-4 border-b border-[rgba(255,255,255,0.05)] bg-[#141414]">
@@ -527,7 +508,6 @@ const App: React.FC = () => {
                                     } else {
                                         displayName = (Object.values(product)[0] as string) || '---';
                                     }
-                                    
                                     const sku = (Object.values(product)[1] as string) || '---';
                                     const isSelected = selectedProductIndex === products.indexOf(product);
                                     const isChecked = checkedProducts.has(products.indexOf(product));
@@ -549,7 +529,6 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* RIGHT COL: SIDEBAR (Properties) */}
                 <div className="w-[25%] min-w-[300px] border-r border-[rgba(255,255,255,0.08)] bg-[rgba(18,18,18,0.95)] z-20">
                     <Sidebar
                         layers={layers}
@@ -568,14 +547,12 @@ const App: React.FC = () => {
                     />
                 </div>
 
-                {/* CENTER: CANVAS */}
                 <div className="flex-1 bg-[#0a0a0a] relative flex flex-col min-w-0">
                     <div className="absolute top-4 right-4 z-20 bg-[rgba(0,0,0,0.5)] backdrop-blur-sm p-1 rounded-full flex items-center border border-[rgba(255,255,255,0.1)]">
                         <button onClick={() => setZoomLevel(Math.max(0.4, zoomLevel - 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomOut size={14} /></button>
                         <span className="text-[10px] font-mono w-8 text-center">{Math.round(zoomLevel * 100)}%</span>
                         <button onClick={() => setZoomLevel(Math.min(1.5, zoomLevel + 0.1))} className="p-2 text-gray-400 hover:text-white"><ZoomIn size={14} /></button>
                     </div>
-                    
                     <div className="flex-1 overflow-auto relative custom-scrollbar">
                         <Canvas
                             layers={layers}
@@ -594,14 +571,12 @@ const App: React.FC = () => {
          )}
       </main>
 
-      {/* SAVE TEMPLATE MODAL */}
       {showSaveModal && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center">
             <div className="bg-[#1a1a1a] border border-[#333] p-6 rounded-md shadow-2xl w-96 relative">
                 <button onClick={() => setShowSaveModal(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={16}/></button>
                 <h3 className="text-lg font-bold text-white serif mb-1">Save Template</h3>
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-4">Name your design preset</p>
-                
                 <input 
                     type="text" 
                     value={newTemplateName}
@@ -611,25 +586,13 @@ const App: React.FC = () => {
                     autoFocus
                     onKeyDown={(e) => e.key === 'Enter' && executeSaveTemplate()}
                 />
-                
                 <div className="flex justify-end gap-3">
-                    <button 
-                        onClick={() => setShowSaveModal(false)}
-                        className="px-4 py-2 text-xs font-bold uppercase text-gray-500 hover:text-white"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        onClick={executeSaveTemplate}
-                        className="px-6 py-2 bg-[#D4AF37] hover:bg-[#b38f20] text-black text-xs font-bold uppercase rounded-sm shadow-md"
-                    >
-                        Save Preset
-                    </button>
+                    <button onClick={() => setShowSaveModal(false)} className="px-4 py-2 text-xs font-bold uppercase text-gray-500 hover:text-white">Cancel</button>
+                    <button onClick={executeSaveTemplate} className="px-6 py-2 bg-[#D4AF37] hover:bg-[#b38f20] text-black text-xs font-bold uppercase rounded-sm shadow-md">Save Preset</button>
                 </div>
             </div>
         </div>
       )}
-
     </div>
   );
 };
